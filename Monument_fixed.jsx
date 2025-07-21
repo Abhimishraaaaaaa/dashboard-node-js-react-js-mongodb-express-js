@@ -132,25 +132,40 @@ const Monument = ({ Type,checkBoxes,headerDropdown }) => {
     (item) => item.Type === "Monument"
   );
 
-  // FIXED: handleHikeChange function to prevent page reset
+  // Add a new state to store the base costs without hike
+  const [baseCosts, setBaseCosts] = useState([]);
+
+  // FIXED: handleHikeChange function to prevent page reset and preserve original values
   const handleHikeChange = (e) => {
     const { value } = e.target;
     const hikePercentValue = parseFloat(value) || 0;
     
-    // Only update hike percent state
+    // Update hike percent state
     setHikePercent(value);
     
-    // Update form values by mapping over current values, not replacing them entirely
+    // Update form values by mapping over current values
     setMonumentFormValue((prevFormValue) => {
       return prevFormValue.map((item, index) => {
-        // Get the corresponding original item
-        const originalItem = originalFromValue[index];
-        if (!originalItem) return item;
+        // Use baseCosts if available, otherwise use current item costs as base
+        let baseItem = baseCosts[index] || item;
+        
+        // If baseCosts is empty, save current costs as base costs
+        if (!baseCosts[index] && item?.ItemUnitCost) {
+          setBaseCosts(prev => {
+            const newBaseCosts = [...prev];
+            newBaseCosts[index] = {
+              ...item,
+              ItemUnitCost: { ...item.ItemUnitCost }
+            };
+            return newBaseCosts;
+          });
+          baseItem = item;
+        }
 
-        const originalFAdult = parseFloat(originalItem?.ItemUnitCost?.FAdult) || 0;
-        const originalAdult = parseFloat(originalItem?.ItemUnitCost?.Adult) || 0;
-        const originalChild = parseFloat(originalItem?.ItemUnitCost?.Child) || 0;
-        const originalFChild = parseFloat(originalItem?.ItemUnitCost?.FChild) || 0;
+        const originalFAdult = parseFloat(baseItem?.ItemUnitCost?.FAdult) || 0;
+        const originalAdult = parseFloat(baseItem?.ItemUnitCost?.Adult) || 0;
+        const originalChild = parseFloat(baseItem?.ItemUnitCost?.Child) || 0;
+        const originalFChild = parseFloat(baseItem?.ItemUnitCost?.FChild) || 0;
 
         return {
           ...item, // Keep all existing properties
@@ -165,6 +180,43 @@ const Monument = ({ Type,checkBoxes,headerDropdown }) => {
         };
       });
     });
+  };
+
+  // Update baseCosts when rates are loaded or changed (not when hike is applied)
+  useEffect(() => {
+    if (monumentFromValue.length > 0 && baseCosts.length === 0) {
+      setBaseCosts(monumentFromValue.map(item => ({
+        ...item,
+        ItemUnitCost: { ...item.ItemUnitCost }
+      })));
+    }
+  }, [monumentFromValue.length > 0 && monumentFromValue.every(item => 
+    item?.ItemUnitCost?.FAdult !== undefined || 
+    item?.ItemUnitCost?.Adult !== undefined
+  )]);
+
+  // Update baseCosts when service ID changes (new rates loaded)
+  useEffect(() => {
+    const hasValidRates = monumentFromValue.some(item => 
+      parseFloat(item?.ItemUnitCost?.FAdult) > 0 || 
+      parseFloat(item?.ItemUnitCost?.Adult) > 0
+    );
+    
+    if (hasValidRates && !hikePercent) {
+      setBaseCosts(monumentFromValue.map(item => ({
+        ...item,
+        ItemUnitCost: { ...item.ItemUnitCost }
+      })));
+    }
+  }, [monumentFromValue?.map((item) => item?.ServiceId).join(",")]);
+
+  // Alternative approach: Reset baseCosts when original values change significantly
+  const resetBaseCosts = () => {
+    setBaseCosts(monumentFromValue.map(item => ({
+      ...item,
+      ItemUnitCost: { ...item.ItemUnitCost }
+    })));
+    setHikePercent(""); // Reset hike as well
   };
 
   // Rest of your component code remains the same...
